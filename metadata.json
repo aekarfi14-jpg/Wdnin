@@ -1,0 +1,10 @@
+{
+  "name": "WDNIN",
+  "description": "Offline 2-Player Reverse Audio Party Game",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
