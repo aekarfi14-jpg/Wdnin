@@ -49,21 +49,12 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
 
-      - name: Sync Capacitor Android Project
+      - name: Recreate Android Project
         run: |
+          rm -rf android
+          npx cap add android
           npx cap sync android
-
-      - name: Generate Gradle Wrapper and Make Executable
-        run: |
-         cd android
-         if [ ! -f gradlew ]; then
-         gradle wrapper
-         fi
-         chmod +x ./gradlew
-      - name: Build Android Debug APK
-        run: |
-         cd android
-         ./gradlew assembleDebug --stacktrace --no-daemon
+          chmod +x ./android/gradlew
 
       - name: Build Android Debug APK
         run: |
