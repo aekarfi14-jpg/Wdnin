@@ -60,6 +60,10 @@ jobs:
          gradle wrapper
          fi
          chmod +x ./gradlew
+      - name: Build Android Debug APK
+        run: |
+         cd android
+         ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Build Android Debug APK
         run: |
