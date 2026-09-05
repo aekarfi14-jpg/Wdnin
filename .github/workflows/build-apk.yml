@@ -28,7 +28,11 @@ jobs:
 
       - name: Install Node Dependencies
         run: |
-          npm ci || npm install
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
 
       - name: Build Web Application (Vite)
         run: |
@@ -49,10 +53,8 @@ jobs:
           yes | sdkmanager --licenses || true
           sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
 
-      - name: Recreate Android Project
+      - name: Sync Capacitor Android Project
         run: |
-          rm -rf android
-          npx cap add android
           npx cap sync android
           chmod +x ./android/gradlew
 

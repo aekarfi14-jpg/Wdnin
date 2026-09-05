@@ -535,17 +535,25 @@ export const DirectorHub: React.FC<DirectorHubProps> = ({
               {/* Toggle Start Playback / Stop Playback */}
               <button
                 id="btn-toggle-play-reversed-p1"
+                disabled={!isPlayingAudio && listenCount >= allowedListens}
                 onClick={isPlayingAudio ? onStopPlayback : onPlayReversedP1}
-                className={`flex-1 h-13 rounded-2xl font-black text-sm md:text-base border-b-4 active:border-b-0 active:translate-y-1 shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                className={`flex-1 h-13 rounded-2xl font-black text-sm md:text-base border-b-4 active:border-b-0 active:translate-y-1 shadow-md transition-all flex items-center justify-center gap-2 ${
                   isPlayingAudio
-                    ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-slate-950 border-amber-950'
-                    : 'bg-gradient-to-r from-sky-600 via-blue-600 to-sky-700 hover:from-sky-500 hover:to-blue-500 text-white border-sky-950'
+                    ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-slate-950 border-amber-950 cursor-pointer'
+                    : listenCount >= allowedListens
+                    ? 'bg-slate-900/60 text-slate-600 border border-slate-800 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-sky-600 via-blue-600 to-sky-700 hover:from-sky-500 hover:to-blue-500 text-white border-sky-950 cursor-pointer'
                 }`}
               >
                 {isPlayingAudio ? (
                   <>
                     <Square className="w-4 h-4 fill-current" />
                     <span>{isArabic ? 'إيقاف التشغيل' : 'Stop Playback'}</span>
+                  </>
+                ) : listenCount >= allowedListens ? (
+                  <>
+                    <Play className="w-4 h-4 fill-current opacity-40" />
+                    <span>{isArabic ? 'انتهى حد الاستماع' : 'Listen Limit Reached'}</span>
                   </>
                 ) : (
                   <>

@@ -14,6 +14,7 @@ import { WinModal } from './components/WinModal';
 import { MicrophonePermissionModal } from './components/MicrophonePermissionModal';
 import { StatisticsModal } from './components/StatisticsModal';
 import { saveRoundAudioAndStats, saveMatchFinish, getNextMatchNumber } from './utils/statsStorage';
+import { isAndroidNative, checkAndroidMicPermission, requestAndroidMicPermission } from './utils/nativePermission';
 import { Home, Award, Headphones, BarChart3 } from 'lucide-react';
 
 const DEFAULT_SETTINGS: GameSettings = {
@@ -72,6 +73,7 @@ export default function App() {
   const [statisticsOpen, setStatisticsOpen] = useState<boolean>(false);
   const [currentMatchNumber, setCurrentMatchNumber] = useState<number>(1);
   const [micPermissionModalOpen, setMicPermissionModalOpen] = useState<boolean>(false);
+  const [isPermanentlyDenied, setIsPermanentlyDenied] = useState<boolean>(false);
   const [pendingPlayerRecording, setPendingPlayerRecording] = useState<'P1' | 'P2' | null>(null);
   const [lastGuessSuccess, setLastGuessSuccess] = useState<boolean>(false);
   const [lastGuessPhrase, setLastGuessPhrase] = useState<string>('');
@@ -79,6 +81,7 @@ export default function App() {
   // Audio Engine Instance
   const audioEngine = useRef(AudioEngine.getInstance()).current;
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const scoresRef = useRef<{ p1: number; p2: number }>({ p1: 0, p2: 0 });
 
   // Sync settings to engine and localStorage
   useEffect(() => {
@@ -140,6 +143,7 @@ export default function App() {
     setGuesserPlayer('P2');
     setP1Score(0);
     setP2Score(0);
+    scoresRef.current = { p1: 0, p2: 0 };
     setP1Audio(null);
     setP2Audio(null);
     setListenCount(0);
@@ -164,6 +168,16 @@ export default function App() {
   // STEP 2: Player 1 Recording
   const handleStartRecordingP1 = async () => {
     try {
+      if (isAndroidNative()) {
+        const perm = await requestAndroidMicPermission();
+        if (perm.permission !== 'granted') {
+          setIsPermanentlyDenied(perm.isPermanentlyDenied);
+          setPendingPlayerRecording('P1');
+          setMicPermissionModalOpen(true);
+          return;
+        }
+      }
+
       await audioEngine.playSfx('quack_5.mp3');
       setRecordingSeconds(0);
       setGameState('PLAYER_1_RECORDING');
@@ -187,12 +201,15 @@ export default function App() {
           return next;
         });
       }, 1000);
-    } catch (err) {
+    } catch (err: unknown) {
       console.warn('Microphone permission or hardware error:', err);
       clearRecordingTimer();
       setVolumeLevel(0);
       setGameState('ROUND_START');
       setPendingPlayerRecording('P1');
+      if (err && typeof err === 'object' && 'isPermanentlyDenied' in err) {
+        setIsPermanentlyDenied(Boolean((err as { isPermanentlyDenied?: boolean }).isPermanentlyDenied));
+      }
       setMicPermissionModalOpen(true);
     }
   };
@@ -246,6 +263,10 @@ export default function App() {
       setIsPlayingAudio(false);
       return;
     }
+    // Block playback if reached or exceeded allowedListens limit
+    if (listenCount >= settings.allowedListens) {
+      return;
+    }
     audioEngine.playStartListeningSound();
     setListenCount((prev) => prev + 1);
     setIsPlayingAudio(true);
@@ -271,6 +292,16 @@ export default function App() {
   // STEP 5: Player 2 Recording Imitation
   const startRecordingP2Process = async () => {
     try {
+      if (isAndroidNative()) {
+        const perm = await requestAndroidMicPermission();
+        if (perm.permission !== 'granted') {
+          setIsPermanentlyDenied(perm.isPermanentlyDenied);
+          setPendingPlayerRecording('P2');
+          setMicPermissionModalOpen(true);
+          return;
+        }
+      }
+
       await audioEngine.playSfx('quack_5.mp3');
       setRecordingSeconds(0);
       setIsP2RecordingActive(true);
@@ -294,13 +325,16 @@ export default function App() {
           return next;
         });
       }, 1000);
-    } catch (err) {
+    } catch (err: unknown) {
       console.warn('Microphone permission or hardware error in P2:', err);
       clearRecordingTimer();
       setVolumeLevel(0);
       setIsP2RecordingActive(false);
       setGameState('PLAYER_2_LISTENING');
       setPendingPlayerRecording('P2');
+      if (err && typeof err === 'object' && 'isPermanentlyDenied' in err) {
+        setIsPermanentlyDenied(Boolean((err as { isPermanentlyDenied?: boolean }).isPermanentlyDenied));
+      }
       setMicPermissionModalOpen(true);
     }
   };
@@ -371,18 +405,19 @@ export default function App() {
   const handleGuessResult = async (success: boolean) => {
     setLastGuessSuccess(success);
 
-    // Guesser score calculation
-    let currentP1 = p1Score;
-    let currentP2 = p2Score;
+    // Guesser score calculation without stale state
+    let nextP1Score = scoresRef.current.p1;
+    let nextP2Score = scoresRef.current.p2;
     if (success) {
       // Guesser gets points!
       if (guesserPlayer === 'P1') {
-        currentP1 += 1;
-        setP1Score((s) => s + 1);
+        nextP1Score += 1;
       } else {
-        currentP2 += 1;
-        setP2Score((s) => s + 1);
+        nextP2Score += 1;
       }
+      scoresRef.current = { p1: nextP1Score, p2: nextP2Score };
+      setP1Score(nextP1Score);
+      setP2Score(nextP2Score);
       setLastGuessPhrase(getRandomSuccessPhrase(settings.language));
       audioEngine.playSfx('suuuui.mp3');
     } else {
@@ -415,14 +450,17 @@ export default function App() {
       setGameState('FINAL_WIN');
       setWinModalOpen(true);
 
-      // Save complete match finish summary
-      const finalWinner = p1Score > p2Score ? p1Name : p2Score > p1Score ? p2Name : 'tie';
+      // Save complete match finish summary with guaranteed fresh scores
+      const finalP1 = scoresRef.current.p1;
+      const finalP2 = scoresRef.current.p2;
+      const finalWinner = finalP1 > finalP2 ? p1Name : finalP2 > finalP1 ? p2Name : 'tie';
+
       saveMatchFinish({
         matchNumber: currentMatchNumber,
         player1Name: p1Name,
         player2Name: p2Name,
-        player1Score: p1Score,
-        player2Score: p2Score,
+        player1Score: finalP1,
+        player2Score: finalP2,
         winnerName: finalWinner,
         roundsCount: settings.roundsCount,
         timestamp: Date.now(),
@@ -466,6 +504,7 @@ export default function App() {
     setGuesserPlayer('P2');
     setP1Score(0);
     setP2Score(0);
+    scoresRef.current = { p1: 0, p2: 0 };
     setP1Audio(null);
     setP2Audio(null);
     setListenCount(0);
@@ -491,14 +530,45 @@ export default function App() {
     const granted = await audioEngine.requestMicrophonePermission();
     if (granted) {
       setMicPermissionModalOpen(false);
+      setIsPermanentlyDenied(false);
       if (pendingPlayerRecording === 'P1') {
         handleStartRecordingP1();
       } else if (pendingPlayerRecording === 'P2') {
         startRecordingP2Process();
       }
       setPendingPlayerRecording(null);
+    } else {
+      if (isAndroidNative()) {
+        const check = await checkAndroidMicPermission();
+        setIsPermanentlyDenied(check.isPermanentlyDenied);
+      }
     }
   };
+
+  useEffect(() => {
+    const handleAppFocus = async () => {
+      if (isAndroidNative() && micPermissionModalOpen) {
+        const check = await checkAndroidMicPermission();
+        if (check.permission === 'granted') {
+          setIsPermanentlyDenied(false);
+          setMicPermissionModalOpen(false);
+          if (pendingPlayerRecording === 'P1') {
+            handleStartRecordingP1();
+          } else if (pendingPlayerRecording === 'P2') {
+            startRecordingP2Process();
+          }
+          setPendingPlayerRecording(null);
+        } else {
+          setIsPermanentlyDenied(check.isPermanentlyDenied);
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleAppFocus);
+    return () => {
+      window.removeEventListener('focus', handleAppFocus);
+    };
+  }, [micPermissionModalOpen, pendingPlayerRecording]);
 
   const handleEnableDemoMode = () => {
     audioEngine.setDemoMode(true);
@@ -788,8 +858,8 @@ export default function App() {
         isOpen={winModalOpen}
         player1Name={p1Name}
         player2Name={p2Name}
-        p1Score={p1Score}
-        p2Score={p2Score}
+        p1Score={scoresRef.current.p1}
+        p2Score={scoresRef.current.p2}
         onReplay={handleReplay}
         onMainMenu={handleReturnToMainMenu}
         onOpenStatistics={() => setStatisticsOpen(true)}
@@ -808,6 +878,7 @@ export default function App() {
         onEnableDemoMode={handleEnableDemoMode}
         onClose={handleCloseMicModal}
         lang={settings.language}
+        isPermanentlyDenied={isPermanentlyDenied}
       />
     </div>
   );

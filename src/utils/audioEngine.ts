@@ -1,3 +1,5 @@
+import { isAndroidNative, requestAndroidMicPermission } from './nativePermission';
+
 /**
  * WDNIN Audio Engine
  * Real Offline Audio Recording & Temporal PCM Reversal
@@ -109,6 +111,12 @@ export class AudioEngine {
 
   public async requestMicrophonePermission(): Promise<boolean> {
     try {
+      if (isAndroidNative()) {
+        const res = await requestAndroidMicPermission();
+        if (res.permission !== 'granted') {
+          return false;
+        }
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       this.mediaStream = stream;
       return true;
@@ -318,6 +326,15 @@ export class AudioEngine {
         }
       }, 50);
       return;
+    }
+
+    if (isAndroidNative()) {
+      const res = await requestAndroidMicPermission();
+      if (res.permission !== 'granted') {
+        const err = new Error('MICROPHONE_PERMISSION_DENIED') as Error & { isPermanentlyDenied?: boolean };
+        err.isPermanentlyDenied = res.isPermanentlyDenied;
+        throw err;
+      }
     }
 
     const ctx = this.getAudioContext();
