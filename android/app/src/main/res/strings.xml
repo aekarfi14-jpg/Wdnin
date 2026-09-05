@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Wdnin</string>
-    <string name="title_activity_main">Wdnin</string>
-    <string name="package_name">com.wdnin.game</string>
-    <string name="custom_url_scheme">com.wdnin.game</string>
-</resources>
