@@ -24,7 +24,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-        
 
       - name: Install Node Dependencies
         run: |
@@ -57,6 +56,40 @@ jobs:
         run: |
           npx cap sync android
           chmod +x ./android/gradlew
+
+      - name: Install ImageMagick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
+      - name: Set WDNIN launcher icon
+        run: |
+          set -e
+          ICON_SOURCE="public/assets/images/wdnin.png"
+          if [ ! -f "$ICON_SOURCE" ]; then
+            echo "::error::Launcher icon not found: $ICON_SOURCE"
+            exit 1
+          fi
+          RES="android/app/src/main/res"
+          echo "Removing all Capacitor generated launcher icons..."
+          find "$RES" -type f \( -name "ic_launcher.png" -o -name "ic_launcher_round.png" -o -name "ic_launcher.xml" -o -name "ic_launcher_round.xml" \) -delete
+          mkdir -p "$RES/mipmap-mdpi" "$RES/mipmap-hdpi" "$RES/mipmap-xhdpi" "$RES/mipmap-xxhdpi" "$RES/mipmap-xxxhdpi"
+          generate_icon() {
+            SIZE=$1
+            OUT=$2
+            convert "$ICON_SOURCE" -resize "${SIZE}x${SIZE}^" -gravity center -extent "${SIZE}x${SIZE}" "$OUT"
+          }
+          generate_icon 48 "$RES/mipmap-mdpi/ic_launcher.png"
+          generate_icon 48 "$RES/mipmap-mdpi/ic_launcher_round.png"
+          generate_icon 72 "$RES/mipmap-hdpi/ic_launcher.png"
+          generate_icon 72 "$RES/mipmap-hdpi/ic_launcher_round.png"
+          generate_icon 96 "$RES/mipmap-xhdpi/ic_launcher.png"
+          generate_icon 96 "$RES/mipmap-xhdpi/ic_launcher_round.png"
+          generate_icon 144 "$RES/mipmap-xxhdpi/ic_launcher.png"
+          generate_icon 144 "$RES/mipmap-xxhdpi/ic_launcher_round.png"
+          generate_icon 192 "$RES/mipmap-xxxhdpi/ic_launcher.png"
+          generate_icon 192 "$RES/mipmap-xxxhdpi/ic_launcher_round.png"
+          echo "Launcher icon generation complete."
 
       - name: Build Android Debug APK
         run: |
